@@ -9,10 +9,11 @@ import time
 import numpy as np
 import matplotlib
 from sys import platform
-if platform =="darwin": # mac
-  import PyQt5
-  matplotlib.use("Qt5Agg")
-else: # linux
+# STUDENTS: disabled this below as it resulted in bad behavior of robot on mac
+# if platform =="darwin": # mac
+#   import PyQt5
+#   matplotlib.use("Qt5Agg")
+if platform!="darwin" : # linux
   matplotlib.use('TkAgg')
 
 from matplotlib import pyplot as plt
@@ -72,6 +73,51 @@ class HopfNetwork():
     self.PHI_bound = np.zeros((4,4))
     self.PHI_pace = np.zeros((4,4))
 
+    # Create actual coupling matrices for phi (w will be all identical set by self._couple)
+    # From the definition of the different gait sequences from the course, we have the following values
+    # We always define offset from 0 to 2*pi
+    # NB: each diagonal is zero as phase offset with itself is zero !
+    # FL(i) where i stands for define indice of that leg, to have quick reminde
+    FR = 0
+    FL = 1
+    RR = 2
+    RL = 3
+    
+    # Trot (diagonals in sync)
+    # From FL to non same RL and FR 
+    self.PHI_trot[FL,RL]=self.PHI_trot[FL,FR]=np.pi
+    self.PHI_trot[RL,FL]=self.PHI_trot[FR,FL]=-np.pi
+    # From RR to non same RL and FR
+    self.PHI_trot[RR,FR]=self.PHI_trot[RR,RL]=np.pi
+    self.PHI_trot[FR,RR]=self.PHI_trot[RL,RR]=-np.pi
+    
+    # PACE (each side in sync)
+    # From FL to others
+    self.PHI_pace[FL,FR]=self.PHI_pace[FL,RR]=np.pi
+    self.PHI_pace[FR,FL]=self.PHI_pace[RR,FL]=-np.pi 
+    # From RL to others
+    self.PHI_pace[RL,FR]=self.PHI_pace[RL,RR]=np.pi
+    self.PHI_pace[FR,RL]=self.PHI_pace[RR,RL]=-np.pi
+    
+    # BOUND (front in sync, back in sync side in sync)
+    # From RL to others
+    self.PHI_bound[RL,FL]=self.PHI_bound[RL,FR]=np.pi
+    self.PHI_bound[FL,RL]=self.PHI_bound[FR,RL]=-np.pi 
+    # From RR to others
+    self.PHI_bound[RR,FL]=self.PHI_bound[RR,FR]=np.pi
+    self.PHI_bound[FL,RR]=self.PHI_bound[FR,RR]=-np.pi
+    
+    # WALK (lateral sequence)
+    # From each to the next with 2*pi/4 offset starting with FL
+    self.PHI_walk[FL,RR]=self.PHI_walk[RR,FR]=self.PHI_walk[FR,RL]=np.pi/2
+    self.PHI_walk[RR,FL]=self.PHI_walk[FR,RR]=self.PHI_walk[RL,FR]=-np.pi/2
+    # Each being 2*pi/2
+    self.PHI_walk[FL,FR]=self.PHI_walk[RR,RL]=np.pi
+    self.PHI_walk[FR,FL]=self.PHI_walk[RL,RR]=-np.pi
+    # Last one which is 2pi*3/4
+    self.PHI_walk[FL,RL]=np.pi*3/2
+    self.PHI_walk[RL,FL]=-np.pi*3/2
+    
     if gait == "TROT":
       print('TROT')
       self.PHI = self.PHI_trot
