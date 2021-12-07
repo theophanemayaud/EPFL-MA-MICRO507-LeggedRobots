@@ -51,11 +51,11 @@ class HopfNetwork():
     self._couple = couple
     self._coupling_strength = coupling_strength
     self._dt = time_step
-    self._set_gait(gait)
+    self._set_gait(gait) # Defines self.PHI : +- symmetrical 4x4 matrix of offsets from i to j
 
     # set oscillator initial conditions  
-    self.X[0,:] = np.random.rand(4) * .1
-    self.X[1,:] = self.PHI[0,:] 
+    self.X[0,:] = np.random.rand(4) * .1 # X[0,:] are the ri of each leg : current oscillator amplitude
+    self.X[1,:] = self.PHI[0,:] # One choice of initialization but X[1,:] is just phase theta of each oscillator
 
     # save body and foot shaping
     self._ground_clearance = ground_clearance 
@@ -153,25 +153,44 @@ class HopfNetwork():
     X = self.X.copy()
     X_dot = np.zeros((2,4))
     alpha = 50 
-
+    
     # loop through each leg's oscillator
     for i in range(4):
       # get r_i, theta_i from X
-      r, theta = 0, 0 # [TODO]
+      r, theta = X[:,i] # [TODO]
       # compute r_dot (Equation 6)
-      r_dot = 0 # [TODO]
+      r_dot = alpha*(self._mu-r**2)*r # [TODO]
       # determine whether oscillator i is in swing or stance phase to set natural frequency omega_swing or omega_stance (see Section 3)
-      theta_dot = 0 # [TODO]
-
+      theta_dot = self._omega_swing if theta<=np.pi else self._omega_stance # [TODO]
+      
       # loop through other oscillators to add coupling (Equation 7)
       if self._couple:
-        theta_dot += 0 # [TODO]
+        r_js = X[0,:]
+        theta_js = X[1,:]
+        w_ijs = self.PHI[i,:]
+        sinns = theta_js - theta - w_ijs
+        couple_vals = r_js*self._coupling_strength*np.sin(sinns)
+        theta_dot += sum(couple_vals) # [TODO]
+        # Debug information
+#         print("")
+#         print("r_js")
+#         print(r_js)
+#         print("theta_js")
+#         print(theta_js)
+#         print("theta")
+#         print(theta)
+#         print("w_ijs")
+#         print(w_ijs)
+#         print("sinns")
+#         print(sinns)
+#         print("couple_vals")
+#         print(couple_vals)
 
       # set X_dot[:,i]
       X_dot[:,i] = [r_dot, theta_dot]
 
     # integrate 
-    self.X = np.zeros((2,4)) # [TODO]
+    self.X = X + self._dt*X_dot # [TODO]
     # mod phase variables to keep between 0 and 2pi
     self.X[1,:] = self.X[1,:] % (2*np.pi)
 
