@@ -37,7 +37,8 @@ class HopfNetwork():
                 ground_clearance=0.05,  # foot swing height 
                 ground_penetration=0.01,# foot stance penetration into ground 
                 robot_height=0.25,      # in nominal case (standing) 
-                des_step_len=0.04,      # desired step length 
+                des_step_len=0.04,      # desired step length
+                gait_feedback=True,      # wether to output gait chosen or not
                 ):
     
     ###############
@@ -51,6 +52,7 @@ class HopfNetwork():
     self._couple = couple
     self._coupling_strength = coupling_strength
     self._dt = time_step
+    self._gait_feedback = gait_feedback
     self._set_gait(gait) # Defines self.PHI : +- symmetrical 4x4 matrix of offsets from i to j
 
     # set oscillator initial conditions  
@@ -62,7 +64,7 @@ class HopfNetwork():
     self._ground_penetration = ground_penetration
     self._robot_height = robot_height 
     self._des_step_len = des_step_len
-
+    
 
   def _set_gait(self,gait):
     """ For coupling oscillators in phase space. 
@@ -119,16 +121,16 @@ class HopfNetwork():
     self.PHI_walk[RL,FL]=-np.pi*3/2
     
     if gait == "TROT":
-      print('TROT')
+      if self._gait_feedback: print('TROT')
       self.PHI = self.PHI_trot
     elif gait == "PACE":
-      print('PACE')
+      if self._gait_feedback: print('PACE') 
       self.PHI = self.PHI_pace
     elif gait == "BOUND":
-      print('BOUND')
+      if self._gait_feedback: print('BOUND')
       self.PHI = self.PHI_bound
     elif gait == "WALK":
-      print('WALK')
+      if self._gait_feedback: print('WALK')
       self.PHI = self.PHI_walk
     else:
       raise ValueError( gait + 'not implemented.')
