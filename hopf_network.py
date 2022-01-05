@@ -200,7 +200,7 @@ class HopfNetwork():
     self.X = X + self._dt*X_dot # [TODO]
     # mod phase variables to keep between 0 and 2pi
     self.X[1,:] = self.X[1,:] % (2*np.pi)
-
+    self.X_dot = X_dot;
 
 
 if __name__ == "__main__":
