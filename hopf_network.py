@@ -205,12 +205,82 @@ class HopfNetwork():
 
 if __name__ == "__main__":
 
-  ADD_CARTESIAN_PD = True
-  TIME_STEP = 0.001
-  foot_y = 0.0838 # this is the hip length 
-  sideSign = np.array([-1, 1, -1, 1]) # get correct hip sign (body right is negative)
+    TIME_STEP = 0.001
+    foot_y = 0.0838 # this is the hip length 
+    sideSign = np.array([-1, 1, -1, 1]) # get correct hip sign (body right is negative)    
+    gait="WALK"
+    
+    reverse=True
+    tune_omegas=False,
+    omega_stance=np.pi
+    omega_swing=np.pi
+    simulation_duration=10
+    render=True
+    musqrt=1
+    ground_penetration=0.01
+    swing_height=0.05
+    coupling_strength=1
+    add_cartesian_PD=False
+    
+    # default best params found from grid_search    
+    if tune_omegas==False:
+        if reverse==False:
+            if (gait=="WALK"):
+                omega_stance*=8
+                omega_swing*=14
+            elif (gait=="TROT"):
+                omega_stance*=12
+                omega_swing*=4
+            elif (gait=="BOUND"):
+                omega_stance*=5
+                omega_swing*=4
+            elif (gait=="PACE"):
+                omega_stance*=6
+                omega_swing*=13
+        elif reverse==True:
+            if (gait=="WALK"):
+                omega_stance*=19
+                omega_swing*=19
+            elif (gait=="TROT"):
+                omega_stance*=19
+                omega_swing*=20
+            elif (gait=="BOUND"):
+                omega_stance*=19
+                omega_swing*=20
+            elif (gait=="PACE"):
+                omega_stance*=20
+                omega_swing*=18
+        else: print("reverse must be true/false")
 
-  env = QuadrupedGymEnv(render=True,              # visualize
+    # initialize Hopf Network, supply gait
+    cpg = HopfNetwork(
+                    mu=musqrt**2,                # converge to sqrt(mu)
+                    omega_stance=omega_stance, # MUST EDIT
+                    omega_swing=omega_swing,  # MUST EDIT
+                    gait=gait,            # change depending on desired gait
+                    coupling_strength=coupling_strength,    # coefficient to multiply coupling matrix
+                    couple=True,            # should couple
+                    time_step=TIME_STEP,    # time step 
+                    ground_clearance=swing_height,  # foot swing height 
+                    ground_penetration=ground_penetration,# foot stance penetration into ground 
+                    robot_height=0.25,      # in nominal case (standing) 
+                    des_step_len=0.04,      # desired step length 
+                    gait_feedback=False
+                    )
+
+    TEST_STEPS = int(simulation_duration / (TIME_STEP))
+    t = np.arange(TEST_STEPS)*TIME_STEP
+
+    ############## Sample Gains
+    # joint PD gains
+    kp=np.array([150,70,70])
+    kd=np.array([2,0.5,0.5])
+    # Cartesian PD gains
+    kpCartesian = np.diag([2500]*3)
+    kdCartesian = np.diag([40]*3)
+
+    env = QuadrupedGymEnv(
+                      render=render,              # visualize
                       on_rack=False,              # useful for debugging! 
                       isRLGymInterface=False,     # not using RL
                       time_step=TIME_STEP,
@@ -219,69 +289,49 @@ if __name__ == "__main__":
                       add_noise=False,    # start in ideal conditions
                       # record_video=True
                       )
+    final_distance_xyz = np.array([0, 0, 0])
+    fell=False
+    for j in range(TEST_STEPS):
+        # initialize torque array to send to motors
+        action = np.zeros(12) 
+        # get desired foot positions from CPG 
+        xs,zs = cpg.update()
+        # [TODO] get current motor angles and velocities for joint PD, see GetMotorAngles(), GetMotorVelocities() in quadruped.py
+        q = env.robot.GetMotorAngles()
+        dq = env.robot.GetMotorVelocities()
 
-  # initialize Hopf Network, supply gait
-  cpg = HopfNetwork(time_step=TIME_STEP)
+        # loop through desired foot positions and calculate torques
+        for i in range(4):
+            # initialize torques for legi
+            tau = np.zeros(3)
+            # get desired foot i pos (xi, yi, zi) in leg frame
+            leg_xyz = np.array([xs[i],sideSign[i] * foot_y,zs[i]])
+            # call inverse kinematics to get corresponding joint angles (see ComputeInverseKinematics() in quadruped.py)
+    #         leg_q = np.zeros(3) # [TODO] 
+            leg_q = env.robot.ComputeInverseKinematics(i, leg_xyz)
+            # Add joint PD contribution to tau for leg i (Equation 4)
+    #         tau += np.zeros(3) # [TODO] 
+            tau += kp*(leg_q-q[3*i:3*i+3])+kd*(-dq[3*i:3*i+3]) # assume we want 0 velocity
 
-  TEST_STEPS = int(10 / (TIME_STEP))
-  t = np.arange(TEST_STEPS)*TIME_STEP
+            # add Cartesian PD contribution
+            if add_cartesian_PD:
+                # Get current Jacobian and foot position in leg frame (see ComputeJacobianAndPosition() in quadruped.py)
+                # [TODO] 
+                [ J, pos] = env.robot.ComputeJacobianAndPosition(i)
+                # Get current foot velocity in leg frame (Equation 2)
+                # [TODO] 
+                v = np.dot(J,dq[3*i:3*i+3])
+                # Calculate torque contribution from Cartesian PD (Equation 5) [Make sure you are using matrix multiplications]
+                # [TODO]
+                tau += np.dot(np.transpose(J), (np.dot(kpCartesian, leg_xyz-pos)+ np.dot(kdCartesian, -v))) # assume we want 0 velocity
 
-  # [TODO] initialize data structures to save CPG and robot states
+            # Set tau for legi in action vector
+            action[3*i:3*i+3] = tau
 
-
-  ############## Sample Gains
-  # joint PD gains
-  kp=np.array([150,70,70])
-  kd=np.array([2,0.5,0.5])
-  # Cartesian PD gains
-  kpCartesian = np.diag([2500]*3)
-  kdCartesian = np.diag([40]*3)
-
-
-  for j in range(TEST_STEPS):
-    # initialize torque array to send to motors
-    action = np.zeros(12) 
-    # get desired foot positions from CPG 
-    xs,zs = cpg.update()
-    # [TODO] get current motor angles and velocities for joint PD, see GetMotorAngles(), GetMotorVelocities() in quadruped.py
-    # q = 
-    # dq = 
-
-    # loop through desired foot positions and calculate torques
-    for i in range(4):
-      # initialize torques for legi
-      tau = np.zeros(3)
-      # get desired foot i pos (xi, yi, zi) in leg frame
-      leg_xyz = np.array([xs[i],sideSign[i] * foot_y,zs[i]])
-      # call inverse kinematics to get corresponding joint angles (see ComputeInverseKinematics() in quadruped.py)
-      leg_q = np.zeros(3) # [TODO] 
-      # Add joint PD contribution to tau for leg i (Equation 4)
-      tau += np.zeros(3) # [TODO] 
-
-      # add Cartesian PD contribution
-      if ADD_CARTESIAN_PD:
-        # Get current Jacobian and foot position in leg frame (see ComputeJacobianAndPosition() in quadruped.py)
-        # [TODO] 
-        # Get current foot velocity in leg frame (Equation 2)
-        # [TODO] 
-        # Calculate torque contribution from Cartesian PD (Equation 5) [Make sure you are using matrix multiplications]
-        tau += np.zeros(3) # [TODO]
-
-      # Set tau for legi in action vector
-      action[3*i:3*i+3] = tau
-
-    # send torques to robot and simulate TIME_STEP seconds 
-    env.step(action) 
-
-    # [TODO] save any CPG or robot states
-
-
-
-  ##################################################### 
-  # PLOTS
-  #####################################################
-  # example
-  # fig = plt.figure()
-  # plt.plot(t,joint_pos[1,:], label='FR thigh')
-  # plt.legend()
-  # plt.show()
+        # send torques to robot and simulate TIME_STEP seconds 
+        env.step(action) 
+        final_distance_xyz = np.array(env.robot.GetBasePosition()) - np.array(env.robot._GetDefaultInitPosition())
+        if env.is_fallen():
+            fell=True
+            break
+    final_distance_xyz, fell
